@@ -1,0 +1,38 @@
+# =============================================================
+# Render.com デプロイ設定
+# render.yaml
+# =============================================================
+# 使い方:
+#   1. Render.com ダッシュボードで "New > Blueprint" を選択
+#   2. このリポジトリを接続
+#   3. 以下の環境変数（Secrets）を設定してください:
+#      - ADMIN_API_KEY : 管理者APIキー（任意の強力なランダム文字列）
+#      - GEMINI_API_KEY: Gemini API キー
+# =============================================================
+
+services:
+  # ---- バックエンド API (FastAPI) ----
+  - type: web
+    name: kashiwa-open-campus-api
+    runtime: python
+    region: singapore   # 東京に最も近いリージョン
+    plan: free          # 無料プラン（$0/月、スリープあり）
+    # 本番は starter ($7/月) 推奨: スリープなし + 永続ディスク
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DB_PATH
+        value: /data/events.db      # 永続ディスクにマウント
+      - key: ADMIN_API_KEY
+        sync: false                 # Render Secretsから設定
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://your-app.vercel.app,http://localhost:5173
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+    disk:
+      name: kashiwa-db
+      mountPath: /data
+      sizeGB: 1                     # SQLite用に1GB確保
+    healthCheckPath: /
