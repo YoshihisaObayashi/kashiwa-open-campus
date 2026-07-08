@@ -1,13 +1,18 @@
 # =============================================================
-# Render.com デプロイ設定
+# Render.com デプロイ設定（無料プラン対応版）
 # render.yaml
 # =============================================================
 # 使い方:
 #   1. Render.com ダッシュボードで "New > Blueprint" を選択
 #   2. このリポジトリを接続
-#   3. 以下の環境変数（Secrets）を設定してください:
-#      - ADMIN_API_KEY : 管理者APIキー（任意の強力なランダム文字列）
-#      - GEMINI_API_KEY: Gemini API キー
+#   3. 以下の環境変数を Environment タブで手動設定:
+#      - ADMIN_API_KEY  : 管理者APIキー (openssl rand -hex 32 で生成)
+#      - GEMINI_API_KEY : Gemini API キー
+#
+# ⚠️ 無料プランの制約:
+#   - 永続ディスク非対応 → SQLiteは /tmp に保存（再起動で消える）
+#   - GitHub Actions が毎日 DB を再同期するため実用上は問題なし
+#   - 15分間アクセスがないとスリープ（初回アクセスに30秒かかる）
 # =============================================================
 
 services:
@@ -15,24 +20,19 @@ services:
   - type: web
     name: kashiwa-open-campus-api
     runtime: python
-    region: singapore   # 東京に最も近いリージョン
-    plan: free          # 無料プラン（$0/月、スリープあり）
-    # 本番は starter ($7/月) 推奨: スリープなし + 永続ディスク
+    region: singapore
+    plan: free
     buildCommand: pip install -r backend/requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
     envVars:
       - key: DB_PATH
-        value: /data/events.db      # 永続ディスクにマウント
+        value: /tmp/events.db
       - key: ADMIN_API_KEY
-        sync: false                 # Render Secretsから設定
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
         value: https://your-app.vercel.app,http://localhost:5173
       - key: PYTHONPATH
         value: /opt/render/project/src
-    disk:
-      name: kashiwa-db
-      mountPath: /data
-      sizeGB: 1                     # SQLite用に1GB確保
-    healthCheckPath: /
