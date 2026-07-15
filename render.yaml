@@ -23,7 +23,7 @@ services:
     region: singapore
     plan: free
     buildCommand: pip install -r backend/requirements.txt --prefer-binary
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: bash -c "cd /opt/render/project/src/backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /
     envVars:
       - key: PYTHON_VERSION
@@ -37,4 +37,4 @@ services:
       - key: ALLOWED_ORIGINS
         value: https://your-app.vercel.app,http://localhost:5173
       - key: PYTHONPATH
-        value: /opt/render/project/src
+        value: /opt/render/project/src/backend
