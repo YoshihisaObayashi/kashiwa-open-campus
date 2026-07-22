@@ -10,7 +10,59 @@ from typing import Any
 DB_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent.parent / "events.db"))
 
 
+def _ensure_db() -> None:
+    """DB ファイルが存在しない場合、最低限のスキーマを初期化する"""
+    from pathlib import Path as _Path
+    import sys as _sys
+    db = _Path(DB_PATH)
+    if db.exists():
+        return
+    db.parent.mkdir(parents=True, exist_ok=True)
+    # scraper の init_db を使う（同梱されていない場合はインラインで作成）
+    conn = sqlite3.connect(str(db))
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS events (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            title_ja            TEXT NOT NULL,
+            title_en            TEXT,
+            date_start          TEXT,
+            date_end            TEXT,
+            venue_ja            TEXT,
+            venue_en            TEXT,
+            description_ja      TEXT,
+            description_en      TEXT,
+            researchers         TEXT DEFAULT '[]',
+            researchers_en      TEXT DEFAULT '[]',
+            target_audience_ja  TEXT,
+            target_audience_en  TEXT,
+            registration_required INTEGER DEFAULT 0,
+            registration_url    TEXT,
+            department_ja       TEXT,
+            department_en       TEXT,
+            source_url          TEXT,
+            scraped_at          TEXT,
+            content_hash        TEXT,
+            translation_edited  INTEGER DEFAULT 0
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS events_fts
+            USING fts5(title_ja, title_en, description_ja, description_en,
+                       department_ja, department_en, researchers,
+                       content=events, content_rowid=id);
+        CREATE TABLE IF NOT EXISTS scrape_log (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_at        TEXT,
+            source_url    TEXT,
+            new_count     INTEGER DEFAULT 0,
+            updated_count INTEGER DEFAULT 0,
+            error_count   INTEGER DEFAULT 0,
+            notes         TEXT
+        );
+    """)
+    conn.close()
+
+
 def get_conn() -> sqlite3.Connection:
+    _ensure_db()
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
