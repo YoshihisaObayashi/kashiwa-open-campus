@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: 'スクレイプ対象URL（省略時は環境変数のデフォルト値）'
+        description: 'スクレイプ対象URL（省略時は変数のデフォルト値）'
         required: false
         type: string
 
@@ -21,6 +21,9 @@ jobs:
       DB_PATH: ${{ github.workspace }}/events.db
       TARGET_URL: ${{ inputs.target_url || vars.TARGET_URL || 'https://www.kashiwa.u-tokyo.ac.jp/open_campus_2025/' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # シークレットをジョブレベルの環境変数に展開（if条件で参照するため）
+      RENDER_ADMIN_URL: ${{ secrets.RENDER_ADMIN_URL }}
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
 
     steps:
       - name: Checkout repository
@@ -39,18 +42,8 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps
 
-      # DBファイルをRender.comからダウンロード（永続化のため）
-      # ローカル開発時はスキップ
-      - name: Download existing DB from storage
-        if: ${{ env.RENDER_DB_DOWNLOAD_URL != '' }}
-        env:
-          RENDER_DB_DOWNLOAD_URL: ${{ secrets.RENDER_DB_DOWNLOAD_URL }}
-        run: |
-          curl -o events.db "$RENDER_DB_DOWNLOAD_URL" || echo "DB download failed, starting fresh"
-
       - name: Run scraper
         run: python scraper/scrape.py
-        id: scrape
 
       - name: Show scrape log
         run: python -c "
@@ -62,17 +55,17 @@ for log in logs:
 conn.close()
 "
 
-      # Render.com の外部DBにアップロード（設定している場合）
+      # DB を Render.com にアップロード（RENDER_ADMIN_URL が設定されている場合のみ）
       - name: Upload updated DB to backend
         if: ${{ env.RENDER_ADMIN_URL != '' }}
-        env:
-          RENDER_ADMIN_URL: ${{ secrets.RENDER_ADMIN_URL }}
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
         run: |
+          echo "Uploading DB to $RENDER_ADMIN_URL ..."
           curl -X POST "$RENDER_ADMIN_URL/api/admin/db-sync" \
             -H "X-API-Key: $ADMIN_API_KEY" \
             -F "db=@events.db" \
-            --fail-with-body || echo "DB sync skipped"
+            --fail-with-body \
+            && echo "DB sync successful" \
+            || echo "DB sync failed (non-fatal)"
 
       # 統計情報をサマリーとして記録
       - name: Report summary
