@@ -35,6 +35,6 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        value: https://your-app.vercel.app,http://localhost:5173
+        value: https://kashiwa-open-campus.vercel.app,http://localhost:5173
       - key: PYTHONPATH
         value: /opt/render/project/src/backend
