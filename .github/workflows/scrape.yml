@@ -21,7 +21,6 @@ jobs:
       DB_PATH: ${{ github.workspace }}/events.db
       TARGET_URL: ${{ inputs.target_url || vars.TARGET_URL || 'https://www.kashiwa.u-tokyo.ac.jp/open_campus_2025/' }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      # シークレットをジョブレベルの環境変数に展開（if条件で参照するため）
       RENDER_ADMIN_URL: ${{ secrets.RENDER_ADMIN_URL }}
       ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
 
@@ -46,42 +45,46 @@ jobs:
         run: python scraper/scrape.py
 
       - name: Show scrape log
-        run: python -c "
-import sqlite3, json
-conn = sqlite3.connect('events.db')
-logs = conn.execute('SELECT * FROM scrape_log ORDER BY id DESC LIMIT 5').fetchall()
-for log in logs:
-    print(dict(zip([d[0] for d in conn.execute(\"PRAGMA table_info(scrape_log)\").fetchall()], log)))
-conn.close()
-"
-
-      # DB を Render.com にアップロード（RENDER_ADMIN_URL が設定されている場合のみ）
-      - name: Upload updated DB to backend
-        if: ${{ env.RENDER_ADMIN_URL != '' }}
         run: |
-          echo "Uploading DB to $RENDER_ADMIN_URL ..."
-          curl -X POST "$RENDER_ADMIN_URL/api/admin/db-sync" \
-            -H "X-API-Key: $ADMIN_API_KEY" \
+          python3 << 'PYEOF'
+          import sqlite3
+          conn = sqlite3.connect('events.db')
+          cols_info = conn.execute("PRAGMA table_info(scrape_log)").fetchall()
+          cols = [c[1] for c in cols_info]
+          logs = conn.execute("SELECT * FROM scrape_log ORDER BY id DESC LIMIT 5").fetchall()
+          for log in logs:
+              print(dict(zip(cols, log)))
+          conn.close()
+          PYEOF
+
+      - name: Upload updated DB to backend
+        if: env.RENDER_ADMIN_URL != ''
+        run: |
+          echo "Uploading DB to Render.com..."
+          curl -X POST "${RENDER_ADMIN_URL}/api/admin/db-sync" \
+            -H "X-API-Key: ${ADMIN_API_KEY}" \
             -F "db=@events.db" \
             --fail-with-body \
             && echo "DB sync successful" \
             || echo "DB sync failed (non-fatal)"
 
-      # 統計情報をサマリーとして記録
       - name: Report summary
         if: always()
-        run: python -c "
-import sqlite3, os
-try:
-    conn = sqlite3.connect('events.db')
-    total = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
-    last = conn.execute('SELECT run_at, new_count, updated_count, error_count FROM scrape_log ORDER BY id DESC LIMIT 1').fetchone()
-    conn.close()
-    print(f'## Scrape Summary')
-    print(f'- Total events in DB: {total}')
-    if last:
-        print(f'- Run at: {last[0]}')
-        print(f'- New: {last[1]}, Updated: {last[2]}, Errors: {last[3]}')
-except Exception as e:
-    print(f'Could not read summary: {e}')
-" >> $GITHUB_STEP_SUMMARY
+        run: |
+          python3 << 'PYEOF' >> $GITHUB_STEP_SUMMARY
+          import sqlite3
+          try:
+              conn = sqlite3.connect('events.db')
+              total = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+              last = conn.execute(
+                  'SELECT run_at, new_count, updated_count, error_count FROM scrape_log ORDER BY id DESC LIMIT 1'
+              ).fetchone()
+              conn.close()
+              print('## Scrape Summary')
+              print(f'- Total events in DB: {total}')
+              if last:
+                  print(f'- Run at: {last[0]}')
+                  print(f'- New: {last[1]}, Updated: {last[2]}, Errors: {last[3]}')
+          except Exception as e:
+              print(f'Could not read summary: {e}')
+          PYEOF
