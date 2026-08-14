@@ -6,6 +6,8 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -31,6 +33,34 @@ ALLOWED_ORIGINS = os.environ.get(
     "http://localhost:5173,http://localhost:3000,https://your-app.vercel.app"
 ).split(",")
 
+# GitHub Releases から DB を自動復元するための URL
+DB_RELEASE_URL = os.environ.get(
+    "DB_RELEASE_URL",
+    "https://github.com/YoshihisaObayashi/kashiwa-open-campus/releases/download/latest-db/events.db"
+)
+
+# ---------------------------------------------------------------------------
+# 起動時 DB 自動復元
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app):
+    """起動時に events.db が存在しない場合、GitHub Release から自動ダウンロード"""
+    from database import DB_PATH, _ensure_db
+    db = Path(DB_PATH)
+    if not db.exists() or db.stat().st_size < 8192:
+        print(f"[startup] DB not found or empty at {DB_PATH}, trying GitHub Release...")
+        try:
+            db.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(DB_RELEASE_URL, str(db))
+            print(f"[startup] DB restored from GitHub Release ({db.stat().st_size} bytes)")
+        except Exception as e:
+            print(f"[startup] Could not restore DB from Release: {e} — starting with empty DB")
+            _ensure_db()
+    else:
+        print(f"[startup] DB exists ({db.stat().st_size} bytes)")
+    yield  # アプリ起動
+
 # ---------------------------------------------------------------------------
 # FastAPI アプリ
 # ---------------------------------------------------------------------------
@@ -41,6 +71,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

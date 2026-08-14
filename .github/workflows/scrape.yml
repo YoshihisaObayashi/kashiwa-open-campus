@@ -68,6 +68,19 @@ jobs:
             && echo "DB sync successful" \
             || echo "DB sync failed (non-fatal)"
 
+      # events.db を GitHub Release に保存（Render.com 再起動時の自動復元用）
+      - name: Save DB to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest-db --yes 2>/dev/null || true
+          gh release create latest-db events.db \
+            --title "Latest Events DB (auto-generated)" \
+            --notes "スクレイパーが自動生成。Render.com 再起動時の DB 復元に使用。" \
+            --target main \
+            --latest 2>/dev/null || true
+          echo "Release upload done"
+
       - name: Report summary
         if: always()
         run: |
