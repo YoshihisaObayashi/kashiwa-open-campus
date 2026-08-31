@@ -15,7 +15,7 @@ jobs:
   scrape:
     name: Scrape & Translate
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     env:
       DB_PATH: ${{ github.workspace }}/events.db

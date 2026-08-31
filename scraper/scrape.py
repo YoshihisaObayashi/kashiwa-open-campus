@@ -469,7 +469,7 @@ async def run_translation(db_path: str):
     conn.close()
 
     print(f"[translate] Translating {len(rows)} events...")
-    for row in rows:
+    for i, row in enumerate(rows):
         translated = translate_event(row)
         conn = sqlite3.connect(db_path)
         conn.execute(
@@ -489,6 +489,11 @@ async def run_translation(db_path: str):
         )
         conn.commit()
         conn.close()
+        # レート制限対策（バッチ翻訳でも念のため）
+        if (i + 1) % 10 == 0:
+            print(f"[translate] {i+1}/{len(rows)} done...")
+            asyncio.sleep(0)  # イベントループを解放
+        await asyncio.sleep(0.5)
     print("[translate] Done.")
 
 
